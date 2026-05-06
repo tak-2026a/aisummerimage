@@ -151,16 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateImageWithGemini(userImageBase64, userMimeType, bgBase64, bgMimeType) {
-        // Since we are using the free tier gemini-2.5-flash, it cannot output images natively.
-        // We will use it to analyze the images and generate a highly detailed prompt, 
-        // then pass that prompt to a free image generator (Pollinations AI).
-        
+        // Step 1: Send both images to Gemini to generate a fun vacation caption.
+        // Since Gemini 2.5 Flash cannot output image pixels, we use it for text/vision intelligence.
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         
         const requestBody = {
             contents: [{
                 parts: [
-                    { text: `Analyze these two images. Image 1 is a person, Image 2 is a summer background. Write a highly detailed prompt IN ENGLISH describing a realistic photo of this exact person seamlessly placed into this summer background. Keep the prompt under 40 words. Just output the English prompt, nothing else.` },
+                    { text: `Analyze these two images (a user's portrait and a summer scene). Write a very short, fun, summer vacation caption (maximum 4 words) in English. For example: "Summer Vibes!", "Beach Day!", or "Hello Sunshine!". Output ONLY the caption, no quotes, no markdown.` },
                     {
                         inline_data: {
                             mime_type: userMimeType,
@@ -189,24 +187,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const data = await response.json();
-        let generatedPrompt = data.candidates[0]?.content?.parts[0]?.text || '';
-        
-        // Clean up the prompt (remove markdown, newlines, etc. that might break the URL)
-        generatedPrompt = generatedPrompt.replace(/```/g, '').replace(/\n/g, ' ').trim();
-        console.log("Generated AI Prompt:", generatedPrompt);
+        let generatedCaption = data.candidates[0]?.content?.parts[0]?.text || 'Summer Vibes!';
+        generatedCaption = generatedCaption.replace(/["']/g, '').replace(/\n/g, ' ').trim();
+        console.log("Gemini Generated Caption:", generatedCaption);
 
-        if (!generatedPrompt) {
-            throw new Error('Gemini failed to generate a text description.');
-        }
-        
-        // Pass the prompt to Pollinations AI for image generation
-        const seed = Math.floor(Math.random() * 1000000);
-        // Limit prompt length string to prevent URL 414 Too Long errors
-        const encodedPrompt = encodeURIComponent(generatedPrompt.substring(0, 300));
-        const imgUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${seed}`;
-        
-        console.log("Image URL generated:", imgUrl);
-        return imgUrl;
+        // Step 2: Manually composite the user's face and the Gemini caption onto the summer background using HTML5 Canvas!
+        return new Promise((resolve, reject) => {
+            const bgImg = new Image();
+            bgImg.onload = () => {
+                const userImg = new Image();
+                userImg.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = bgImg.width;
+                    canvas.height = bgImg.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw background
+                    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+                    
+                    // Calculate position for user image (bottom right)
+                    const targetHeight = canvas.height * 0.45; // User takes 45% of height
+                    const ratio = targetHeight / userImg.height;
+                    const targetWidth = userImg.width * ratio;
+                    const x = canvas.width - targetWidth - 40;
+                    const y = canvas.height - targetHeight - 40;
+                    
+                    // Create a circular clipping path for soft edge blending
+                    ctx.save();
+                    ctx.beginPath();
+                    // Draw an ellipse
+                    ctx.ellipse(
+                        x + targetWidth / 2, 
+                        y + targetHeight / 2, 
+                        targetWidth / 2, 
+                        targetHeight / 2, 
+                        0, 0, Math.PI * 2
+                    );
+                    ctx.closePath();
+                    
+                    // Add a glowing shadow to make it pop
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+                    ctx.shadowBlur = 20;
+                    ctx.fill(); // fill to create the shadow
+                    
+                    ctx.clip(); // clip the image to the ellipse
+                    ctx.drawImage(userImg, x, y, targetWidth, targetHeight);
+                    ctx.restore();
+                    
+                    // Write the Gemini generated caption on the image!
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 80px Inter, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 15;
+                    ctx.shadowOffsetX = 3;
+                    ctx.shadowOffsetY = 3;
+                    ctx.fillText(generatedCaption, canvas.width / 2, canvas.height * 0.2);
+                    
+                    // Return the final composited image as a Blob URL
+                    canvas.toBlob((blob) => {
+                        resolve(URL.createObjectURL(blob));
+                    }, 'image/jpeg', 0.9);
+                };
+                userImg.onerror = () => reject(new Error('Failed to load user image onto canvas.'));
+                userImg.src = 'data:' + userMimeType + ';base64,' + userImageBase64;
+            };
+            bgImg.onerror = () => reject(new Error('Failed to load background image onto canvas.'));
+            bgImg.src = 'data:' + bgMimeType + ';base64,' + bgBase64;
+        });
     }
 
     // Download & Restart
