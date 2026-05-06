@@ -151,10 +151,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateImageWithGemini(userImageBase64, userMimeType, bgBase64, bgMimeType) {
-        // Use Gemini's native image generation model which can DIRECTLY output image bytes.
-        // This model accepts image inputs and produces actual synthesized image output.
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
-        
+        // Try models in order of preference until one works
+        const modelsToTry = [
+            'gemini-3.1-flash-image-preview',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-preview-image-generation'
+        ];
+
         const requestBody = {
             contents: [{
                 parts: [
@@ -178,40 +181,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
+        let lastError = null;
+        for (const model of modelsToTry) {
+            try {
+                console.log(`Trying model: ${model}`);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
 
-        if (!response.ok) {
-            const errBody = await response.json();
-            throw new Error(errBody.error?.message || 'Gemini API request failed');
+                if (!response.ok) {
+                    const errBody = await response.json();
+                    const msg = errBody.error?.message || 'API request failed';
+                    console.warn(`Model ${model} failed: ${msg}`);
+                    lastError = new Error(msg);
+                    continue; // try next model
+                }
+
+                const data = await response.json();
+                console.log(`Model ${model} succeeded. Response snippet:`, JSON.stringify(data).substring(0, 300));
+
+                // Find the image part in the response
+                const parts = data.candidates?.[0]?.content?.parts || [];
+                const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+
+                if (!imagePart) {
+                    console.warn(`Model ${model} returned no image part. Parts:`, JSON.stringify(parts).substring(0, 300));
+                    lastError = new Error(`Model ${model} did not return an image.`);
+                    continue; // try next model
+                }
+
+                // Convert the base64 image bytes to a Blob URL for display
+                const imgBytes = imagePart.inlineData.data;
+                const imgMime = imagePart.inlineData.mimeType;
+                const byteChars = atob(imgBytes);
+                const byteArr = new Uint8Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) {
+                    byteArr[i] = byteChars.charCodeAt(i);
+                }
+                const blob = new Blob([byteArr], { type: imgMime });
+                return URL.createObjectURL(blob);
+
+            } catch (err) {
+                console.warn(`Model ${model} threw an error:`, err.message);
+                lastError = err;
+            }
         }
 
-        const data = await response.json();
-        console.log('Gemini response:', JSON.stringify(data).substring(0, 500));
-
-        // Find the image part in the response
-        const parts = data.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
-
-        if (!imagePart) {
-            // Log full response for debugging
-            console.error('No image in Gemini response. Full response:', JSON.stringify(data));
-            throw new Error('Gemini did not return an image. The model may not be available for your API key.');
-        }
-
-        // Convert the base64 image bytes to a Blob URL for display
-        const imgBytes = imagePart.inlineData.data;
-        const imgMime = imagePart.inlineData.mimeType;
-        const byteChars = atob(imgBytes);
-        const byteArr = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) {
-            byteArr[i] = byteChars.charCodeAt(i);
-        }
-        const blob = new Blob([byteArr], { type: imgMime });
-        return URL.createObjectURL(blob);
+        throw lastError || new Error('All image generation models failed. Please check your API key permissions.');
     }
 
     // Download & Restart
