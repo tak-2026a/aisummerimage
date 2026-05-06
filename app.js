@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCapture = document.getElementById('btn-capture');
     
     const imagePreview = document.getElementById('image-preview');
-    const promptInput = document.getElementById('prompt-input');
     const btnGenerate = document.getElementById('btn-generate');
     
     const imageResult = document.getElementById('image-result');
@@ -121,10 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Generation
     btnGenerate.addEventListener('click', async () => {
-        if (!backgroundBase64) {
-            alert('Background image is still loading, please wait a moment.');
-            return;
-        }
         if (!backgroundBase64) {
             alert('Background image is still loading, please wait a moment.');
             return;
