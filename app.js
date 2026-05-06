@@ -151,15 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateImageWithGemini(userImageBase64, userMimeType, bgBase64, bgMimeType) {
-        // Fallback strategy: since most Gemini API keys (like gemini-1.5-pro or flash) 
-        // return text, we use Gemini to create a highly detailed prompt based on the user's images.
-        
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        // Use Gemini's native image generation model which can DIRECTLY output image bytes.
+        // This model accepts image inputs and produces actual synthesized image output.
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
         
         const requestBody = {
             contents: [{
                 parts: [
-                    { text: `Analyze these two images. The first is a user's photo, and the second is a summer background scene. Write a highly detailed prompt IN ENGLISH for an AI image generator to composite the user naturally and beautifully into the summer background scene perfectly. MAXIMUM 40 words. Just output the English prompt, nothing else.` },
+                    { text: `You are given two images. Image 1 is a person's photo. Image 2 is a summer background scene. Seamlessly composite the person from Image 1 into the background of Image 2. Make the lighting and style consistent. Output only the final composited image.` },
                     {
                         inline_data: {
                             mime_type: userMimeType,
@@ -173,14 +172,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 ]
-            }]
+            }],
+            generationConfig: {
+                responseModalities: ["IMAGE", "TEXT"]
+            }
         };
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
         });
 
@@ -190,21 +190,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const data = await response.json();
-        let generatedPrompt = data.candidates[0].content.parts[0].text.trim();
-        
-        // Clean up the prompt (remove markdown, newlines, etc. that might break the URL)
-        generatedPrompt = generatedPrompt.replace(/```/g, '').replace(/\n/g, ' ').trim();
-        console.log("Generated AI Prompt:", generatedPrompt);
-        
-        // Pass the highly detailed prompt to Pollinations AI for image generation
-        // Add a random seed to ensure a fresh image each time
-        const seed = Math.floor(Math.random() * 1000000);
-        // Limit prompt length string to prevent URL 414 Too Long errors
-        const encodedPrompt = encodeURIComponent(generatedPrompt.substring(0, 300));
-        const imgUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${seed}`;
-        
-        console.log("Image URL generated:", imgUrl);
-        return imgUrl;
+        console.log('Gemini response:', JSON.stringify(data).substring(0, 500));
+
+        // Find the image part in the response
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+
+        if (!imagePart) {
+            // Log full response for debugging
+            console.error('No image in Gemini response. Full response:', JSON.stringify(data));
+            throw new Error('Gemini did not return an image. The model may not be available for your API key.');
+        }
+
+        // Convert the base64 image bytes to a Blob URL for display
+        const imgBytes = imagePart.inlineData.data;
+        const imgMime = imagePart.inlineData.mimeType;
+        const byteChars = atob(imgBytes);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+            byteArr[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([byteArr], { type: imgMime });
+        return URL.createObjectURL(blob);
     }
 
     // Download & Restart
