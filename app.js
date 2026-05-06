@@ -121,9 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Generation
     btnGenerate.addEventListener('click', async () => {
-        const prompt = promptInput.value.trim();
-        if (!prompt) {
-            alert('Please enter a prompt');
+        if (!backgroundBase64) {
+            alert('Background image is still loading, please wait a moment.');
             return;
         }
         if (!backgroundBase64) {
@@ -134,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showStep('step-loading');
 
         try {
-            const resultUrl = await generateImageWithGemini(prompt, currentImageBase64, currentImageMimeType, backgroundBase64, backgroundMimeType);
+            const resultUrl = await generateImageWithGemini(currentImageBase64, currentImageMimeType, backgroundBase64, backgroundMimeType);
             
             // Preload the image to ensure it's fully downloaded before showing
             // We use native Image loading instead of fetch to avoid Cloudflare blocking JS fetch requests
@@ -156,17 +155,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    async function generateImageWithGemini(prompt, userImageBase64, userMimeType, bgBase64, bgMimeType) {
+    async function generateImageWithGemini(userImageBase64, userMimeType, bgBase64, bgMimeType) {
         // Fallback strategy: since most Gemini API keys (like gemini-1.5-pro or flash) 
-        // return text, we use Gemini to create a highly detailed prompt based on the user's images + text prompt,
-        // then render it using a free unauthenticated image generation endpoint.
+        // return text, we use Gemini to create a highly detailed prompt based on the user's images.
         
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         
         const requestBody = {
             contents: [{
                 parts: [
-                    { text: `Analyze these two images. The first is a user's photo, and the second is a background scene. Then, based on the following user prompt: "${prompt}", write a highly detailed prompt IN ENGLISH for an AI image generator to composite the user into the background scene perfectly. MAXIMUM 40 words. Just output the English prompt, nothing else.` },
+                    { text: `Analyze these two images. The first is a user's photo, and the second is a summer background scene. Write a highly detailed prompt IN ENGLISH for an AI image generator to composite the user naturally and beautifully into the summer background scene perfectly. MAXIMUM 40 words. Just output the English prompt, nothing else.` },
                     {
                         inline_data: {
                             mime_type: userMimeType,
@@ -236,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnRestart.addEventListener('click', () => {
-        promptInput.value = '';
         currentImageBase64 = null;
         imagePreview.src = '';
         imageResult.src = '';
