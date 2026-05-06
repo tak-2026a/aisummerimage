@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Combiner</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-animation"></div>
+    <div class="container">
+        <header>
+            <h1>AI Image Combiner</h1>
+            <p>Transform your photos with the power of AI</p>
+        </header>
+
+        <main id="app-content">
+            <!-- Step 1: Login -->
+            <section id="step-login" class="step active">
+                <h2>API Authentication</h2>
+                <p>Please enter your Gemini API Key. It will be stored locally in your browser.</p>
+                <input type="password" id="api-key" placeholder="Enter your Gemini API Key">
+                <button id="btn-login" class="primary-btn">Start Creating</button>
+            </section>
+
+            <!-- Step 2: Capture/Upload -->
+            <section id="step-capture" class="step hidden">
+                <h2>Choose an Image</h2>
+                <div class="image-options">
+                    <div class="option-card" id="option-camera">
+                        <div class="icon">📷</div>
+                        <h3>Take a Photo</h3>
+                    </div>
+                    <div class="option-card" id="option-upload">
+                        <div class="icon">📁</div>
+                        <h3>Upload Image</h3>
+                        <input type="file" id="file-upload" accept="image/*" hidden>
+                    </div>
+                </div>
+                
+                <div id="camera-container" class="hidden">
+                    <video id="video" autoplay playsinline></video>
+                    <button id="btn-capture" class="primary-btn">Snap</button>
+                </div>
+            </section>
+
+            <!-- Step 3: Preview & Prompt -->
+            <section id="step-prompt" class="step hidden">
+                <h2>Set Your Vision</h2>
+                <div class="dual-preview-container">
+                    <div class="preview-box">
+                        <span class="preview-label">Your Photo</span>
+                        <img id="image-preview" src="" alt="Your Photo">
+                    </div>
+                    <div class="preview-icon">➕</div>
+                    <div class="preview-box">
+                        <span class="preview-label">Background</span>
+                        <img id="background-preview" src="summer.jpg" alt="Summer Background">
+                    </div>
+                </div>
+                <textarea id="prompt-input" placeholder="E.g., Seamlessly composite my photo into this summer background..."></textarea>
+                <button id="btn-generate" class="primary-btn magic-btn">Combine & Generate ✨</button>
+            </section>
+
+            <!-- Step 4: Loading -->
+            <section id="step-loading" class="step hidden">
+                <div class="loader">
+                    <div class="spinner"></div>
+                    <p>AI is weaving its magic...</p>
+                </div>
+            </section>
+
+            <!-- Step 5: Result -->
+            <section id="step-result" class="step hidden">
+                <h2>Your Masterpiece</h2>
+                <div class="result-container">
+                    <img id="image-result" src="" alt="Generated Result">
+                </div>
+                <div class="actions">
+                    <button id="btn-download" class="secondary-btn">Download</button>
+                    <button id="btn-restart" class="primary-btn">Create Another</button>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
