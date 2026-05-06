@@ -151,17 +151,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateImageWithGemini(userImageBase64, userMimeType, bgBase64, bgMimeType) {
-        // Try models in order of preference until one works
-        const modelsToTry = [
-            'gemini-3.1-flash-image-preview',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-preview-image-generation'
-        ];
-
+        // Since we are using the free tier gemini-2.5-flash, it cannot output images natively.
+        // We will use it to analyze the images and generate a highly detailed prompt, 
+        // then pass that prompt to a free image generator (Pollinations AI).
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        
         const requestBody = {
             contents: [{
                 parts: [
-                    { text: `You are given two images. Image 1 is a person's photo. Image 2 is a summer background scene. Seamlessly composite the person from Image 1 into the background of Image 2. Make the lighting and style consistent. Output only the final composited image.` },
+                    { text: `Analyze these two images. Image 1 is a person, Image 2 is a summer background. Write a highly detailed prompt IN ENGLISH describing a realistic photo of this exact person seamlessly placed into this summer background. Keep the prompt under 40 words. Just output the English prompt, nothing else.` },
                     {
                         inline_data: {
                             mime_type: userMimeType,
@@ -175,62 +174,39 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 ]
-            }],
-            generationConfig: {
-                responseModalities: ["IMAGE", "TEXT"]
-            }
+            }]
         };
 
-        let lastError = null;
-        for (const model of modelsToTry) {
-            try {
-                console.log(`Trying model: ${model}`);
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
-                });
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
 
-                if (!response.ok) {
-                    const errBody = await response.json();
-                    const msg = errBody.error?.message || 'API request failed';
-                    console.warn(`Model ${model} failed: ${msg}`);
-                    lastError = new Error(msg);
-                    continue; // try next model
-                }
-
-                const data = await response.json();
-                console.log(`Model ${model} succeeded. Response snippet:`, JSON.stringify(data).substring(0, 300));
-
-                // Find the image part in the response
-                const parts = data.candidates?.[0]?.content?.parts || [];
-                const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
-
-                if (!imagePart) {
-                    console.warn(`Model ${model} returned no image part. Parts:`, JSON.stringify(parts).substring(0, 300));
-                    lastError = new Error(`Model ${model} did not return an image.`);
-                    continue; // try next model
-                }
-
-                // Convert the base64 image bytes to a Blob URL for display
-                const imgBytes = imagePart.inlineData.data;
-                const imgMime = imagePart.inlineData.mimeType;
-                const byteChars = atob(imgBytes);
-                const byteArr = new Uint8Array(byteChars.length);
-                for (let i = 0; i < byteChars.length; i++) {
-                    byteArr[i] = byteChars.charCodeAt(i);
-                }
-                const blob = new Blob([byteArr], { type: imgMime });
-                return URL.createObjectURL(blob);
-
-            } catch (err) {
-                console.warn(`Model ${model} threw an error:`, err.message);
-                lastError = err;
-            }
+        if (!response.ok) {
+            const errBody = await response.json();
+            throw new Error(errBody.error?.message || 'Gemini API request failed');
         }
 
-        throw lastError || new Error('All image generation models failed. Please check your API key permissions.');
+        const data = await response.json();
+        let generatedPrompt = data.candidates[0]?.content?.parts[0]?.text || '';
+        
+        // Clean up the prompt (remove markdown, newlines, etc. that might break the URL)
+        generatedPrompt = generatedPrompt.replace(/```/g, '').replace(/\n/g, ' ').trim();
+        console.log("Generated AI Prompt:", generatedPrompt);
+
+        if (!generatedPrompt) {
+            throw new Error('Gemini failed to generate a text description.');
+        }
+        
+        // Pass the prompt to Pollinations AI for image generation
+        const seed = Math.floor(Math.random() * 1000000);
+        // Limit prompt length string to prevent URL 414 Too Long errors
+        const encodedPrompt = encodeURIComponent(generatedPrompt.substring(0, 300));
+        const imgUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${seed}`;
+        
+        console.log("Image URL generated:", imgUrl);
+        return imgUrl;
     }
 
     // Download & Restart
